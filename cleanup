@@ -1,0 +1,7 @@
+#!/bin/sh
+
+for i in `find . -name *.sw*`
+do
+    echo "deleting $i..."
+    /bin/rm $i
+done
