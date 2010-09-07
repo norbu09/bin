@@ -1,0 +1,11 @@
+#!/usr/bin/perl
+
+use MIME::Base64;
+
+my $rot13 = shift;
+#foreach my $str ( @{shift} ) {
+    $rot13 =~ tr/a-zA-Z/n-za-mN-ZA-M/;
+#    $rot13 .= $str ;
+#}
+
+print decode_base64( $rot13 ). "\n";
