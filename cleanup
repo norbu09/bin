@@ -5,3 +5,10 @@ do
     echo "deleting $i..."
     /bin/rm $i
 done
+
+for i in `find . -name .vimbk`
+do
+    echo "deleting $i..."
+    /bin/rm -rf $i
+done
+
