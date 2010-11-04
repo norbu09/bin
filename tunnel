@@ -20,6 +20,7 @@ GetOptions(
 ) or pod2usage(2);
 pod2usage(1) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+die pod2usage(1) unless $dest;
 
 my $c = Config::GitLike->new( confname => $conf );
 $c->load;
@@ -35,8 +36,10 @@ my $local  = $c->get( key => $dest . '.local' );
 my $remote = $c->get( key => $dest . '.remote' );
 my $host   = $c->get( key => $dest . '.host' );
 my $command = "autossh -f -M 0 -o StrictHostKeyChecking=no -L $local:127.0.0.1:$remote $host -N";
-print STDERR $command;
-
+#print STDERR $command;
+my $open = qx/sudo lsof -i -n -P | grep ':$local (LISTEN)'/;
+die "There is already something running on $local!\n" if $open;
+print "Opening tunnel to $host\n";
 exec($shell.' '.$command) or die "Could not start tunnel: ".$!;
 
 =head1 NAME
@@ -49,7 +52,10 @@ Version 0.1
 
 =head1 SYNOPSIS
 
-tunnel [options]
+tunnel [options] tunnel.definition
+
+ tunnel backend.rabbitmq
+ tunnel -c mytunnelconf frontend.couchdb
 
  Options:
    -conf|c          config file
@@ -57,10 +63,30 @@ tunnel [options]
    -verbose|v       be chatty
    -man             full documentation
 
- config file:
-   [command]
-     key = value
+ Config file:
+ The script uses a git-like config file and handle inheritance and
+ configs in the usual places (/etc/tunnel.conf, ~/.tunnel.conf,
+ ./.tunnel.conf).
 
+    [backend "rabbitmq"]
+        local  = 5672
+        remote = 5672
+        host   = RABBIT_HOST
+        user   = USER_WITH_SSH_KEYS
+
+    [backend "couchdb"]
+        local  = 5986
+        remote = 5984
+        host   = COUCHDB_HOST
+        user   = USER_WITH_SSH_KEYS
+
+    [frontend "couchdb"]
+        local  = 5984
+        remote = 5984
+        host   = OTHER_COUCHDB_HOST
+        user   = USER_WITH_SSH_KEYS
+
+ See also http://norbu09.org/...
 
 =head1 AUTHOR
 
