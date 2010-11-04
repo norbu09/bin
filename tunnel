@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Config::GitLike;
+use Getopt::Long;
+use Pod::Usage;
+use Data::Dumper;
+
+my $help;
+my $man;
+my $conf = 'tunnel.conf';
+
+my $dest = pop(@ARGV);
+
+GetOptions(
+    'conf|c' => \$conf,
+    'help|?' => \$help,
+    "man"    => \$man,
+) or pod2usage(2);
+pod2usage(1) if $help;
+pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+
+my $c = Config::GitLike->new( confname => $conf );
+$c->load;
+
+die "Could not find tunnel definition for: $dest\n"
+  unless $c->get( key => $dest.'.host' );
+
+my $shell = '/bin/sh -c';
+if ( my $user = $c->get( key => $dest . '.user' ) ) {
+      $shell = 'sudo -b -u ' . $user;
+}
+my $local  = $c->get( key => $dest . '.local' );
+my $remote = $c->get( key => $dest . '.remote' );
+my $host   = $c->get( key => $dest . '.host' );
+my $command = "autossh -f -M 0 -o StrictHostKeyChecking=no -L $local:127.0.0.1:$remote $host -N";
+print STDERR $command;
+
+exec($shell.' '.$command) or die "Could not start tunnel: ".$!;
+
+=head1 NAME
+
+tunnel - a autossh frontend
+
+=head1 VERSION
+
+Version 0.1
+
+=head1 SYNOPSIS
+
+tunnel [options]
+
+ Options:
+   -conf|c          config file
+   -help|?          brief help message
+   -verbose|v       be chatty
+   -man             full documentation
+
+ config file:
+   [command]
+     key = value
+
+
+=head1 AUTHOR
+
+Lenz Gschwendtner, C<< <lenz@springtimesoft.com> >>
+
+=head1 BUGS
+
+Please report any bugs or feature requests to C<< <lenz@springtimesoft.com> >>
+
+=head1 SUPPORT
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc tunnel
+
+=head1 ACKNOWLEDGEMENTS
+
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2010 Lenz Gschwendtner, springtimesoft LTD, all rights reserved.
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
+
+=cut
