@@ -1,20 +1,18 @@
 #!/usr/bin/perl
 
-use strict;
-use warnings;
+use common::sense;
 use Config::GitLike;
 use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
-use feature 'switch';
 use Mac::Pasteboard;
 use File::Temp qw/tempfile/;
+use Shell qw/gpg/;
+use IO::Prompter;
 
 my $help;
 my $man;
 my $passfile = '~/Dropbox/pass/passwords.gpg';
-
-my $dest = pop(@ARGV);
 
 GetOptions(
     "pass|p=s" => \$passfile,
@@ -25,16 +23,22 @@ pod2usage(1) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
 
 my ( $fh, $tmp ) = tempfile();
-my $gpg = qx/which gpg/;
-chomp($gpg);
-system("$gpg --decrypt -q $passfile > $tmp");
-if ( !-f $tmp ) {
-    die "Could not decrypt password file: $passfile\n";
+gpg('-q', '-d', $passfile, ">$tmp");
+if ( ! -f $tmp ) {
+    die "Could not decrypt password file: $passfile\n$!";
 }
 
 my $c = Config::GitLike->new( confname => $tmp );
 $c->load;
 unlink($tmp);
+
+my %tmp;
+my $dest = prompt(
+	-prompt   => "what password are you looking for? (use <TAB> to complete)\n\n: ",
+	-complete => [ grep { !$tmp{$_}++ } map { $_ =~ s/\.[^\.]+$//; $_; } keys %{ { $c->dump } } ],
+);
+
+pod2usage(1) unless $dest;
 
 if ( $c->get_regexp( key => $dest ) ) {
     my $type = $c->get( key => $dest . '.type' );
@@ -45,7 +49,8 @@ if ( $c->get_regexp( key => $dest ) ) {
         when ('ssh')        { open_ssh(); }
         when ('capistrano') { open_cap(); }
         when ('app')        { open_app(); }
-        when ('info')       { open_info(); }
+        when ('shell')      { open_cmmd(); }
+        default             { open_info(); }
     }
 
 }
@@ -54,12 +59,11 @@ else {
 }
 
 sub open_url {
-    my $comm;
+    my $comm = '';
 
     $comm .= $c->get( key => $dest . '.type' ) . '://';
     $comm .= $c->get( key => $dest . '.host' );
-    print "User: " . $c->get( key => $dest . '.user' ) . "\n";
-    print "Pass: " . $c->get( key => $dest . '.pass' ) . "\n";
+    open_info();
     pbcopy( $c->get( key => $dest . '.pass' ) );
     qx/open $comm/;
 }
@@ -71,7 +75,7 @@ sub open_cap {
 }
 
 sub open_ssh {
-    my $comm;
+    my $comm = '';
 
     if ( $c->get( key => $dest . '.port' ) ) {
         $comm .= '-p ' . $c->get( key => $dest . '.port' ) . ' ';
@@ -87,19 +91,24 @@ sub open_ssh {
 }
 
 sub open_app {
-    my $comm;
-
-    $comm .= $c->get( key => $dest . '.app' );
-    print "User: " . $c->get( key => $dest . '.user' ) . "\n";
-    print "Pass: " . $c->get( key => $dest . '.pass' ) . "\n";
+    open_info();
+    my $comm = $c->get( key => $dest . '.app' );
     pbcopy( $c->get( key => $dest . '.pass' ) );
     qx(open /Applications/$comm);
 }
 
 sub open_info {
+	print $/;
     print "User: " . $c->get( key => $dest . '.user' ) . "\n";
     print "Pass: " . $c->get( key => $dest . '.pass' ) . "\n";
     pbcopy( $c->get( key => $dest . '.pass' ) . "\n" );
+}
+
+sub open_cmmd {
+    my $cmmd = $c->get( key => $dest . '.cmmd' );
+    open_info();
+    print $cmmd . $/;
+    system($cmmd);
 }
 
 =head1 NAME
