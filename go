@@ -1,4 +1,36 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
+
+=head1 NAME
+
+go - a password manager ... a good one
+
+=head1 VERSION
+
+Version 1.0
+
+=cut
+
+my $VERSION = 1.0;
+
+=head1 SYNOPSIS
+
+go [options] [<name>]
+
+ name           config section, see config file or Config::GitLike
+
+ Options:
+   -pass|p          password file
+   -help|?          brief help message
+   -verbose|v       be chatty
+   -man             full documentation
+
+ config file:
+   [name]
+     key = value
+
+see Config::GitLike for details.
+
+=cut
 
 use common::sense;
 use Config::GitLike;
@@ -6,7 +38,6 @@ use Getopt::Long;
 use Pod::Usage;
 use Data::Dumper;
 use Mac::Pasteboard;
-use File::Temp qw/tempfile/;
 use Shell qw/gpg/;
 use IO::Prompter;
 
@@ -22,23 +53,31 @@ GetOptions(
 pod2usage(1) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
 
-my ( $fh, $tmp ) = tempfile();
-gpg('-q', '-d', $passfile, ">$tmp");
-if ( ! -f $tmp ) {
-    die "Could not decrypt password file: $passfile\n$!";
-}
+my $config_str = gpg('-q', '-d', $passfile);
+die "Could not decrypt password file: $passfile\n$!"
+    unless $config_str;
 
-my $c = Config::GitLike->new( confname => $tmp );
-$c->load;
-unlink($tmp);
-
-my %tmp;
-my $dest = prompt(
-	-prompt   => "what password are you looking for? (use <TAB> to complete)\n\n: ",
-	-complete => [ grep { !$tmp{$_}++ } map { $_ =~ s/\.[^\.]+$//; $_; } keys %{ { $c->dump } } ],
+my $c = Config::GitLike->new(confname => '');
+$c->data({});
+$c->multiple({});
+$c->config_files([]);
+$c->parse_content(
+    content  => $config_str,
+    callback => sub {
+        $c->define(@_, origin => '');
+    },
+    error    => sub {
+        $c->error_callback(@_, filename => '' );
+    },
 );
 
-pod2usage(1) unless $dest;
+my $dest = $ARGV[0] if $ARGV[0];
+
+my %tmp;
+$dest = prompt(
+    -prompt   => "what password are you looking for? (use <TAB> to complete)\n\n: ",
+    -complete => [ grep { !$tmp{$_}++ } map { $_ =~ s/\.[^\.]+$//; $_; } keys %{ { $c->dump } } ],
+) unless $dest;
 
 if ( $c->get_regexp( key => $dest ) ) {
     my $type = $c->get( key => $dest . '.type' );
@@ -98,7 +137,7 @@ sub open_app {
 }
 
 sub open_info {
-	print $/;
+    print $/;
     print "User: " . $c->get( key => $dest . '.user' ) . "\n";
     print "Pass: " . $c->get( key => $dest . '.pass' ) . "\n";
     pbcopy( $c->get( key => $dest . '.pass' ) . "\n" );
@@ -110,29 +149,6 @@ sub open_cmmd {
     print $cmmd . $/;
     system($cmmd);
 }
-
-=head1 NAME
-
-go - a password manager ... a good one
-
-=head1 VERSION
-
-Version 0.1
-
-=head1 SYNOPSIS
-
-go [options]
-
- Options:
-   -pass|p          password file
-   -help|?          brief help message
-   -verbose|v       be chatty
-   -man             full documentation
-
- config file:
-   [command]
-     key = value
-
 
 =head1 AUTHOR
 
@@ -150,6 +166,8 @@ You can find documentation for this module with the perldoc command.
 
 =head1 ACKNOWLEDGEMENTS
 
+Thanks to Tobias Kirschstein for adding <TAB> completion and security
+improvement via in memory decryption of the passfile :)
 
 =head1 COPYRIGHT & LICENSE
 
